@@ -1,4 +1,5 @@
 #Analyzing unbounded dicentrics counts of Pujol et al. (2016)
+#as discussed in Section 6.1.
 
 #Absolute frequencies from zero to maximal count:
 
@@ -10,28 +11,7 @@ F6M2 <- c(160, 55, 19, 17, 9, 4)
 dataB <- list(M4F1, F4M1, M6F2, F6M2)
 nB <- length(dataB)
 
-
-#Functions for mixed-Poi distribution
-
-#Default parametrization (lambda1, lambda2, omega):
-
-dmpoi <- function(x, lambda1, lambda2, omega=0.5) omega*dpois(x, lambda1) + (1-omega)*dpois(x, lambda2)
-
-pmpoi <- function(x, lambda1, lambda2, omega=0.5) omega*ppois(x, lambda1) + (1-omega)*ppois(x, lambda2)
-
-rmpoi <- function(n, lambda1, lambda2, omega=0.5){
-	X <- rep(NA, n)
-	W <- rbinom(n, 1, 1-omega)
-	n2 <- sum(W)
-	X[W==1] <- rpois(n2, lambda2)
-	X[W==0] <- rpois(n-n2, lambda1)
-	X
-}
-
-
-
-
-
+#... transformed into raw data such that standard implementations can be used:
 
 for(i in 1:nB){
 	#Generate raw data first:
@@ -40,6 +20,7 @@ for(i in 1:nB){
 	for(k in 0:xmax) x <- c(x, rep(k, dataB[[i]][k+1]))
 	dataB[[i]] <- x
 	
+	#The remaining code provides some descriptive statistics:
 	n <- length(x)
 	mu <- mean(x)	
 	p0 <- mean(x==0)
@@ -58,24 +39,41 @@ for(i in 1:nB){
 
 
 
-
 ################################
 #Stein tests for dicentrics data
 ################################
 
 
+#Functions for mixed-Poi distribution
+#with default parametrization (lambda1, lambda2, omega):
 
-#Computing asymptotic power curves using Theorem 4.1.
+#Probability mass function in x:
+dmpoi <- function(x, lambda1, lambda2, omega=0.5) omega*dpois(x, lambda1) + (1-omega)*dpois(x, lambda2)
+
+#Cumulative distribution function in x:
+pmpoi <- function(x, lambda1, lambda2, omega=0.5) omega*ppois(x, lambda1) + (1-omega)*ppois(x, lambda2)
+
+#n i.i.d. random numbers:
+rmpoi <- function(n, lambda1, lambda2, omega=0.5){
+	X <- rep(NA, n)
+	W <- rbinom(n, 1, 1-omega)
+	n2 <- sum(W)
+	X[W==1] <- rpois(n2, lambda2)
+	X[W==0] <- rpois(n-n2, lambda1)
+	X
+}
+#These functions are used for the alternative hypothesis.
 
 
 
-#Sample Stein-Chen statistic:
+#Sample Stein-Chen statistic (3), data x, function f:
 sTSC <- function(x, f){
 	mean(x*f(x)) / mean(x) / mean(f(x+1))
 }
 
 
-#Approximate moment computation:
+#Approximate moment computation (10) of order "klvec" and function f, 
+#where upper truncation limit M implicitly provided by length of pmf vector "dist":
 mu.f <- function(klvec, dist, f){
 	upper <- length(dist)-1
 	x <- 0:upper
@@ -91,14 +89,16 @@ mu.f <- function(klvec, dist, f){
 	mom
 }
 
-#True Stein-Chen statistic:
+#Population Stein-Chen statistic (4),
+#for pmf vector "dist" and function f:
 TSC <- function(dist, f){
 	mu.f(c(1,0), dist, f) / mu.f(1, dist, f) / mu.f(c(0,1), dist, f)
 }
 
-#Asymptotics of test statistics:
+#Asymptotics of test statistic according to Theorem 1:
 
-#"Normalized" covariances, i.e., Cov/mu1/mu2:
+#"Normalized" covariances, i.e., Cov/mu1/mu2,
+#for pmf vector "dist" and function f:
 nsig <- function(dist, f){
 	
 	#Some expressions occur repeatedly:
@@ -116,7 +116,8 @@ nsig <- function(dist, f){
 	c(sig11, sig12, sig13, sig22, sig23, sig33)
 }
 
-#Asymptotic mean and SD:
+#Asymptotic mean and SD with sample size n,
+#for pmf vector "dist" and function f:
 TSCmeansd <- function(n, dist, f){
 	Tf <- TSC(dist, f)
 	nsigs <- nsig(dist, f)
@@ -128,10 +129,11 @@ TSCmeansd <- function(n, dist, f){
 }
 
 
-#Testing H0: Poi with mu
+#Testing H0: Poi with mean mu
 #against H1: another dist
 
-#Two-sided critical values:
+#Two-sided critical values for given level,
+#with mean mu, sample size n, function f, and upper truncation:
 crit.poi <- function(mu, n, f, upper=50, level=0.05){
 	z2 <- qnorm(1-level/2)
 	pmf <- dpois(0:upper, mu)
@@ -140,14 +142,17 @@ crit.poi <- function(mu, n, f, upper=50, level=0.05){
 	musig[1] + c(-1,1) * z2 * musig[2]
 }
 
-#Exceedance probability for given interval "crit" under alternative:
+#Exceedance probability for given interval "crit" under alternative (specified by pmf vector "dist"),
+#with sample size n and function f,
+#where crit might be computed using function "crit.poi":
 apower <- function(n, dist, f, crit){
 	musig <- TSCmeansd(n, dist, f)
 
 	pnorm(crit[1], musig[1], musig[2]) + 1-pnorm(crit[2], musig[1], musig[2])
 }
 
-#Asymptotic p value:
+#Asymptotic p value of statistic TSC,
+#with mean mu, sample size n, function f, and upper truncation:
 apvalue <- function(TSC, mu, n, f, upper=50){
 	pmf <- dpois(0:upper, mu)
 	
@@ -155,7 +160,6 @@ apvalue <- function(TSC, mu, n, f, upper=50){
 
 	2*(1-pnorm(abs(TSC-musig[1])/musig[2]))
 }
-#apvalue(TSC, mu, n, f)
 
 
 
@@ -166,16 +170,20 @@ apvalue <- function(TSC, mu, n, f, upper=50){
 #dataB tested against mixed-Poi alternative
 ###########################################
 
+#For mixed-Poi alternative (omega=0.5),
+#we have mean=(lam1+lam2)/2
+#and dispersion index equals I=1+(lam2-lam1)^2/4 / mu.
+#So (I-1)*mu=(lam2-lam1)^2/4 and 2*mu=lam1+lam2,
+#leading to lam2 = mu + sqrt((I-1)*mu) and lam1 = mu - sqrt((I-1)*mu).
 
-#Use individual means of data for test design:
+
+#We use individual means of data for test design.
+#The following code generates Table 7 (except competitor tests):
 
 upper <- 50
 
 tabI <- c(1.1, 1.25, 1.5)
 no.I <- length(tabI)
-
-tab.a <- seq(0.1,3,0.1)
-no.a <- length(tab.a)
 
 #Find optimal b numerically:
 for(i in 1:nB){
@@ -222,6 +230,7 @@ for(l in 1:no.I){
 
 ####################
 #Further Simulations
+#for Table 7
 ####################
 
 #For comparison, try out Poisson U-test,
@@ -297,3 +306,278 @@ results
 # [10,] 0.7575758 1.10  264 4944 22967
 # [11,] 0.7575758 1.25  264 4939 74547
 # [12,] 0.7575758 1.50  264 4855 99782
+
+#Power values of last column used in Table 7.
+
+
+
+
+#For comparison, try out discrete KS-test, 
+#as implemented in dgof package, see Arnold and Emerson (2011).
+#Null hypothesis needs to be specified as stepfun.
+#Exact P-values not offered for sample size n>30.
+
+#install.packages("dgof")
+library("dgof")
+
+level <- 0.05 #actual target level
+
+
+set.seed(123)
+reps <- 1e5
+
+upper <- 50
+
+tabmu <- tabn <- rep(NA, nB)
+for(i in 1:nB){
+	x <- dataB[[i]]
+	tabmu[i] <- mean(x)
+	tabn[i] <- length(x)
+}
+tabI <- c(1.1, 1.25, 1.5)
+no.I <- length(tabI)
+
+
+
+#Finite-sample performance of sizes:
+reject <- array(0, c(no.I, nB, 2))
+for(k in 1:nB){
+	n <- tabn[k]
+	mu <- tabmu[k]
+
+	#CDF under null:
+	f0 <- stepfun(0:upper, ppois((-1):upper, mu))
+	
+for(l in 1:no.I){
+	Id <- tabI[l]
+	lam1 <- mu - sqrt((Id-1)*mu)
+	lam2 <- mu + sqrt((Id-1)*mu)
+
+	for(r in 1:reps){
+		data0 <- rpois(n, mu)
+		data1 <- rmpoi(n, lam1, lam2)
+		
+		P0 <- ks.test(data0, f0)$p.value
+		P1 <- ks.test(data1, f0)$p.value
+		
+		if(P0<level) reject[l,k,1] <- reject[l,k,1]+1
+		if(P1<level) reject[l,k,2] <- reject[l,k,2]+1
+	} #for reps
+
+	#print(c(mu,Id,n, opt.des[l,k,], reject[l,k,]))
+}} #for n,I
+
+results <- array(NA, c(no.I*nB, 5))
+i <- 0
+for(k in 1:nB){
+for(l in 1:no.I){
+	i <- i+1
+	results[i,] <- c(tabmu[k], tabI[l], tabn[k], reject[l,k,])
+}} #for n,I
+results
+ # [1,] 0.5012531 1.10  399  534  1527
+ # [2,] 0.5012531 1.25  399  546 11452
+ # [3,] 0.5012531 1.50  399  575 72139
+ # [4,] 0.6288344 1.10  326  667  1659
+ # [5,] 0.6288344 1.25  326  664 11607
+ # [6,] 0.6288344 1.50  326  641 68095
+ # [7,] 0.6979167 1.10  288  667  1792
+ # [8,] 0.6979167 1.25  288  675 10935
+ # [9,] 0.6979167 1.50  288  663 64526
+# [10,] 0.7575758 1.10  264  686  1934
+# [11,] 0.7575758 1.25  264  768 11566
+# [12,] 0.7575758 1.50  264  739 63697
+
+#These results are summarized in Table S8 of the Supplement.
+
+
+
+#For comparison, try out discrete KS-test, 
+#as implemented in dgof package, see Arnold and Emerson (2011),
+#but where critical value determined by simulation.
+
+#install.packages("dgof")
+library("dgof")
+
+level <- 0.05 #actual target level
+
+
+set.seed(123)
+reps <- 1e5
+
+upper <- 50
+
+tabmu <- tabn <- rep(NA, nB)
+for(i in 1:nB){
+	x <- dataB[[i]]
+	tabmu[i] <- mean(x)
+	tabn[i] <- length(x)
+}
+tabI <- c(1.1, 1.25, 1.5)
+no.I <- length(tabI)
+
+
+
+#Finite-sample performance of sizes:
+reject <- array(0, c(no.I, nB, 2))
+tabcrit <- rep(NA, nB)
+for(k in 1:nB){
+	n <- tabn[k]
+	mu <- tabmu[k]
+
+	#CDF under null:
+	f0 <- stepfun(0:upper, ppois((-1):upper, mu))
+
+	#Determine critical value by simulation:
+	D <- rep(NA, reps)
+	for(r in 1:reps){
+		data0 <- rpois(n, mu)
+		D[r] <- ks.test(data0, f0)$statistic
+	} #for reps
+	tabcrit[k] <- quantile(D, 1-level)[[1]]
+	
+for(l in 1:no.I){
+	Id <- tabI[l]
+	lam1 <- mu - sqrt((Id-1)*mu)
+	lam2 <- mu + sqrt((Id-1)*mu)
+
+	for(r in 1:reps){
+		data0 <- rpois(n, mu)
+		data1 <- rmpoi(n, lam1, lam2)
+		
+		T0 <- ks.test(data0, f0)$statistic
+		T1 <- ks.test(data1, f0)$statistic
+		
+		if(T0>tabcrit[k]) reject[l,k,1] <- reject[l,k,1]+1
+		if(T1>tabcrit[k]) reject[l,k,2] <- reject[l,k,2]+1
+	} #for reps
+}} #for n,I
+
+results <- array(NA, c(no.I*nB, 6))
+i <- 0
+for(k in 1:nB){
+for(l in 1:no.I){
+	i <- i+1
+	results[i,] <- c(tabmu[k], tabI[l], tabn[k], tabcrit[k], reject[l,k,])
+}} #for n,I
+results
+ # [1,] 0.5012531 1.10  399 0.04836427 4675  8647
+ # [2,] 0.5012531 1.25  399 0.04836427 4650 35979
+ # [3,] 0.5012531 1.50  399 0.04836427 4628 96973
+ # [4,] 0.6288344 1.10  326 0.05468537 4905  9850
+ # [5,] 0.6288344 1.25  326 0.05468537 4869 36774
+ # [6,] 0.6288344 1.50  326 0.05468537 4929 94789
+ # [7,] 0.6979167 1.10  288 0.05793462 5027  8734
+ # [8,] 0.6979167 1.25  288 0.05793462 4929 32602
+ # [9,] 0.6979167 1.50  288 0.05793462 4869 91334
+# [10,] 0.7575758 1.10  264 0.06150149 5069  8630
+# [11,] 0.7575758 1.25  264 0.06150149 4980 30526
+# [12,] 0.7575758 1.50  264 0.06150149 4905 88568
+
+#These results are summarized in Table S8 of the Supplement.
+
+#Power values of last column used in Table 7.
+
+
+
+
+
+#For comparison, try out LR-test, 
+#with asymptotic design.
+
+#Negative log-likelihood function of MPoi distribution (1:1 mixture) for data x.
+#Numerical optimization w.r.t. lambda1 and delta=lambda2-lamba1, so
+#lambda2=lambda1+delta
+
+llMPoi <- function(par, x){
+	#par = c(lambda1,delta)
+	lambda1 <- par[1]
+	lambda2 <- lambda1+par[2]
+	-sum(log(dmpoi(x, lambda1, lambda2)))
+}
+
+#Function to execute the LR-test for Poi-H0 against MPoi-H1:
+LRpoimpoi <- function(x){
+	#MLE of Poisson mean:
+	mu.poi <- mean(x)
+	lmax.poi <- sum(log(dpois(x, mu.poi)))
+	
+	Id0 <- max(1.1,var(x)/mu.poi)
+	
+	#MLE of MPoi distribution by numerical optimization:
+	estml <- suppressWarnings(optim(c(mu.poi-sqrt((Id0-1)*mu.poi), 2*sqrt((Id0-1)*mu.poi)), llMPoi, method="L-BFGS-B", lower=c(0.001,0.001), upper=c(4.999,4.999), control=list(ndeps=c(1e-4,1e-4)), x=x, hessian=FALSE))
+	
+	lam1.mpoi <- estml$par[1]
+	lam2.mpoi <- lam1.mpoi + estml$par[2]
+	mu.mpoi <- (lam1.mpoi+lam2.mpoi)/2
+	Id.mpoi <- 1+(lam2.mpoi-lam1.mpoi)^2/4 / mu.mpoi
+	lmax.mpoi <- (-estml$value)
+
+	c(mu.poi, lmax.poi, mu.mpoi, Id.mpoi, lmax.mpoi, 2*(lmax.mpoi-lmax.poi))
+	#The last value in this output is the actual test statistic.
+}
+
+
+level <- 0.05 #actual target level
+crit <- qchisq(1-2*level, 1) #(Self & Liang, 1987, Case 5)
+
+set.seed(123)
+reps <- 1e5
+
+tabmu <- tabn <- rep(NA, nB)
+for(i in 1:nB){
+	x <- dataB[[i]]
+	tabmu[i] <- mean(x)
+	tabn[i] <- length(x)
+}
+tabI <- c(1.1, 1.25, 1.5)
+no.I <- length(tabI)
+
+
+
+#Finite-sample performance of sizes:
+reject <- array(0, c(no.I, nB, 2))
+for(k in 1:nB){
+	n <- tabn[k]
+	mu <- tabmu[k]
+	
+for(l in 1:no.I){
+	Id <- tabI[l]
+	lam1 <- mu - sqrt((Id-1)*mu)
+	lam2 <- mu + sqrt((Id-1)*mu)
+
+	for(r in 1:reps){
+		data0 <- rpois(n, mu)
+		data1 <- rmpoi(n, lam1, lam2)
+		
+		T0 <- LRpoimpoi(data0)[6]
+		T1 <- LRpoimpoi(data1)[6]
+		
+		if(T0>crit) reject[l,k,1] <- reject[l,k,1]+1
+		if(T1>crit) reject[l,k,2] <- reject[l,k,2]+1
+	} #for reps
+
+}} #for nB,I
+
+results <- array(NA, c(no.I*nB, 5))
+i <- 0
+for(k in 1:nB){
+for(l in 1:no.I){
+	i <- i+1
+	results[i,] <- c(tabmu[k], tabI[l], tabn[k], reject[l,k,])
+}} #for nB,I
+results
+# 0.50125313283208 1.1 399 4457 36665
+# 0.50125313283208 1.25 399 4556 92629
+# 0.50125313283208 1.5 399 4541 1e+05
+# 0.628834355828221 1.1 326 4430 32265
+# 0.628834355828221 1.25 326 4420 87757
+# 0.628834355828221 1.5 326 4543 99993
+# 0.697916666666667 1.1 288 4362 29489
+# 0.697916666666667 1.25 288 4361 84323
+# 0.697916666666667 1.5 288 4408 99976
+# 0.757575757575758 1.1 264 4530 27872
+# 0.757575757575758 1.25 264 4513 81303
+# 0.757575757575758 1.5 264 4271 99937
+
+#Power values of last column used in Table 7.
